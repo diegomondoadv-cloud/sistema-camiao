@@ -1,0 +1,699 @@
+// =============================================================================
+// Schema do banco de dados — Sistema de Transportadora
+// Conforme PLANO_DO_SISTEMA.md v1.1
+// Valores monetários: Decimal(14,2) — nunca float.
+// Preparado para crescimento: filial_id nas tabelas operacionais.
+// Histórico preservado: viagem guarda cavalo/carreta/motorista do momento.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // url: conexão usada pela aplicação (em produção serverless, o POOLER do
+  //      Supabase — porta 6543, com ?pgbouncer=true).
+  url       = env("DATABASE_URL")
+  // directUrl: conexão DIRETA (porta 5432), usada só por migrações. Localmente
+  //            aponta para o mesmo banco do DATABASE_URL.
+  directUrl = env("DIRECT_URL")
+}
+
+// ------------------------------ ENUMS ---------------------------------------
+
+enum Papel {
+  admin
+  gestor
+  motorista
+}
+
+enum SituacaoCavalo {
+  ativo
+  manutencao
+  inativo
+  vendido
+}
+
+enum SituacaoCarreta {
+  ativo
+  manutencao
+  inativo
+  vendido
+}
+
+enum FormaRemuneracao {
+  salario
+  comissao
+  misto
+}
+
+enum TipoCliente {
+  cliente
+  transportadora
+}
+
+enum StatusViagem {
+  planejada
+  aguardando_carregamento
+  em_viagem
+  entregue
+  aguardando_pagamento
+  finalizada
+  cancelada
+}
+
+enum CategoriaDespesa {
+  combustivel
+  arla
+  pedagio
+  alimentacao
+  estacionamento
+  diaria
+  descarga
+  ajudante
+  lavagem
+  manutencao_emergencial
+  pneus
+  comissao_motorista
+  outras
+}
+
+enum SituacaoRecebimento {
+  a_vencer
+  vencida
+  parcialmente_recebida
+  recebida
+  contestada
+}
+
+enum EscopoCustoFixo {
+  empresa
+  veiculo
+}
+
+enum PeriodicidadeCusto {
+  mensal
+  anual
+  unico
+}
+
+enum SituacaoPneu {
+  em_uso
+  estoque
+  reforma
+  descartado
+}
+
+enum CategoriaDocumento {
+  crlv
+  antt
+  apolice_seguro
+  cnh
+  toxicologico
+  contrato
+  doc_veiculo
+  doc_motorista
+  doc_cliente
+  outros
+}
+
+enum EntidadeVinculada {
+  empresa
+  veiculo
+  carreta
+  motorista
+  cliente
+}
+
+enum EscopoMeta {
+  empresa
+  veiculo
+}
+
+enum AcaoAuditoria {
+  criou
+  alterou
+  excluiu
+}
+
+// ------------------------------ FILIAL --------------------------------------
+
+model Filial {
+  id        String   @id @default(cuid())
+  nome      String
+  cnpj      String?
+  cidade    String?
+  uf        String?  @db.VarChar(2)
+  situacao  String   @default("ativa")
+  criadoEm  DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  usuarios     Usuario[]
+  cavalos      Cavalo[]
+  carretas     Carreta[]
+  motoristas   Motorista[]
+  clientes     Cliente[]
+  viagens      Viagem[]
+  custosFixos  CustoFixo[]
+  documentos   Documento[]
+  metas        Meta[]
+  fornecedores Fornecedor[]
+  contasPagar  ContaPagar[]
+
+  @@map("filiais")
+}
+
+// ------------------------------ USUÁRIO -------------------------------------
+
+model Usuario {
+  id            String   @id @default(cuid())
+  nome          String
+  email         String   @unique
+  senhaHash     String   @map("senha_hash")
+  papel         Papel    @default(gestor)
+  ativo         Boolean  @default(true)
+  precisaTrocarSenha Boolean @default(true) @map("precisa_trocar_senha")
+
+  filialId      String?  @map("filial_id")
+  filial        Filial?  @relation(fields: [filialId], references: [id])
+
+  motoristaId   String?  @unique @map("motorista_id")
+  motorista     Motorista? @relation(fields: [motoristaId], references: [id])
+
+  criadoEm      DateTime @default(now()) @map("criado_em")
+  atualizadoEm  DateTime @updatedAt @map("atualizado_em")
+
+  despesasCriadas       Despesa[]  @relation("DespesaCriadaPor")
+  anexosCriados         Anexo[]    @relation("AnexoCriadoPor")
+  alteracoes            HistoricoAlteracao[]
+
+  @@index([filialId])
+  @@map("usuarios")
+}
+
+// ------------------------------ CAVALO --------------------------------------
+
+model Cavalo {
+  id                     String   @id @default(cuid())
+  placa                  String   @unique
+  marca                  String?
+  modelo                 String?
+  ano                    Int?
+  kmAtual                Int?     @map("km_atual")
+  mediaConsumoEsperada   Decimal? @map("media_consumo_esperada") @db.Decimal(6, 2) // km/l
+  capacidade             String?
+  situacao               SituacaoCavalo @default(ativo)
+  valorParcela           Decimal? @map("valor_parcela") @db.Decimal(14, 2)
+  vencimentoParcela      Int?     @map("vencimento_parcela") // dia do mês
+  seguro                 String?
+  rastreador             String?
+  observacoes            String?
+
+  filialId               String?  @map("filial_id")
+  filial                 Filial?  @relation(fields: [filialId], references: [id])
+
+  // Vínculos "atuais" (o histórico real fica em cada viagem)
+  carretaAtualId         String?  @map("carreta_atual_id")
+  carretaAtual           Carreta? @relation("CarretaAtual", fields: [carretaAtualId], references: [id])
+  motoristaAtualId       String?  @map("motorista_atual_id")
+  motoristaAtual         Motorista? @relation("MotoristaAtual", fields: [motoristaAtualId], references: [id])
+
+  criadoEm               DateTime @default(now()) @map("criado_em")
+  atualizadoEm           DateTime @updatedAt @map("atualizado_em")
+
+  viagens                Viagem[]
+  abastecimentos         Abastecimento[]
+  custosFixos            CustoFixo[]
+  pneus                  Pneu[]
+  metas                  Meta[]
+  manutencoes            Manutencao[]
+  contasPagar            ContaPagar[]
+
+  @@index([filialId])
+  @@index([situacao])
+  @@map("cavalos")
+}
+
+// ------------------------------ CARRETA -------------------------------------
+
+model Carreta {
+  id             String   @id @default(cuid())
+  placa          String   @unique
+  tipoCarroceria String?  @map("tipo_carroceria") // ex.: sider
+  numeroEixos    Int?     @map("numero_eixos")
+  situacao       SituacaoCarreta @default(ativo)
+  observacoes    String?
+
+  filialId       String?  @map("filial_id")
+  filial         Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  cavalosVinculados Cavalo[] @relation("CarretaAtual")
+  viagens           Viagem[]
+
+  @@index([filialId])
+  @@map("carretas")
+}
+
+// ------------------------------ MOTORISTA -----------------------------------
+
+model Motorista {
+  id                 String   @id @default(cuid())
+  nome               String
+  telefone           String?
+  cpf                String?
+  cnh                String?
+  categoriaCnh       String?  @map("categoria_cnh")
+  vencCnh            DateTime? @map("venc_cnh")
+  vencToxicologico   DateTime? @map("venc_toxicologico")
+  formaRemuneracao   FormaRemuneracao @default(comissao) @map("forma_remuneracao")
+  salario            Decimal? @db.Decimal(14, 2)
+  percentualComissao Decimal? @map("percentual_comissao") @db.Decimal(5, 2) // %
+  observacoes        String?
+
+  filialId           String?  @map("filial_id")
+  filial             Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm           DateTime @default(now()) @map("criado_em")
+  atualizadoEm       DateTime @updatedAt @map("atualizado_em")
+
+  usuario            Usuario?
+  viagens            Viagem[]
+  cavalosVinculados  Cavalo[] @relation("MotoristaAtual")
+
+  @@index([filialId])
+  @@map("motoristas")
+}
+
+// ------------------------------ CLIENTE -------------------------------------
+
+model Cliente {
+  id                  String   @id @default(cuid())
+  tipo                TipoCliente @default(cliente)
+  razaoSocial         String   @map("razao_social")
+  cnpjCpf             String?  @map("cnpj_cpf")
+  telefone            String?
+  responsavel         String?
+  prazoMedioPagamento Int?     @map("prazo_medio_pagamento") // dias
+  dadosBancarios      String?  @map("dados_bancarios")
+  observacoes         String?
+
+  filialId            String?  @map("filial_id")
+  filial              Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm            DateTime @default(now()) @map("criado_em")
+  atualizadoEm        DateTime @updatedAt @map("atualizado_em")
+
+  viagens             Viagem[]
+
+  @@index([filialId])
+  @@map("clientes")
+}
+
+// ------------------------------ VIAGEM --------------------------------------
+
+model Viagem {
+  id                    String   @id @default(cuid())
+
+  // Fotografia do momento (preserva histórico mesmo após trocas)
+  cavaloId              String   @map("cavalo_id")
+  cavalo                Cavalo   @relation(fields: [cavaloId], references: [id])
+  carretaId             String?  @map("carreta_id")
+  carreta               Carreta? @relation(fields: [carretaId], references: [id])
+  motoristaId           String?  @map("motorista_id")
+  motorista             Motorista? @relation(fields: [motoristaId], references: [id])
+  clienteId             String?  @map("cliente_id")
+  cliente               Cliente? @relation(fields: [clienteId], references: [id])
+
+  filialId              String?  @map("filial_id")
+  filial                Filial?  @relation(fields: [filialId], references: [id])
+
+  embarcador            String?
+  destinatario          String?
+  origem                String?
+  destino               String?
+  dataCarregamento      DateTime? @map("data_carregamento")
+  previsaoEntrega       DateTime? @map("previsao_entrega")
+  dataEntrega           DateTime? @map("data_entrega")
+  tipoCarga             String?  @map("tipo_carga")
+  peso                  Decimal? @db.Decimal(12, 3)
+  numeroPaletes         Int?     @map("numero_paletes")
+
+  valorBrutoFrete       Decimal  @default(0) @map("valor_bruto_frete") @db.Decimal(14, 2)
+  adiantamento          Decimal  @default(0) @db.Decimal(14, 2)
+  comissaoTransportadora Decimal @default(0) @map("comissao_transportadora") @db.Decimal(14, 2)
+  percentualImposto     Decimal  @default(2.8) @map("percentual_imposto") @db.Decimal(5, 2)
+  comissaoMotoristaPaga Boolean  @default(false) @map("comissao_motorista_paga")
+  pedagioIncluso        Boolean  @default(true) @map("pedagio_incluso")
+
+  kmInicial             Int?     @map("km_inicial")
+  kmFinal               Int?     @map("km_final")
+  kmCarregado           Int?     @map("km_carregado")
+  kmVazio               Int?     @map("km_vazio")
+
+  status                StatusViagem @default(planejada)
+  numeroCte             String?  @map("numero_cte")
+  numeroMdfe            String?  @map("numero_mdfe")
+  observacoes           String?
+
+  criadoEm              DateTime @default(now()) @map("criado_em")
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em")
+
+  despesas              Despesa[]
+  abastecimentos        Abastecimento[]
+  recebimentos          Recebimento[]
+
+  @@index([filialId])
+  @@index([cavaloId])
+  @@index([clienteId])
+  @@index([status])
+  @@index([dataCarregamento])
+  @@map("viagens")
+}
+
+// ------------------------------ DESPESA -------------------------------------
+
+model Despesa {
+  id             String   @id @default(cuid())
+  viagemId       String   @map("viagem_id")
+  viagem         Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+
+  data           DateTime
+  categoria      CategoriaDespesa
+  valor          Decimal  @db.Decimal(14, 2)
+  formaPagamento String?  @map("forma_pagamento")
+  estabelecimento String?
+  descricao      String?
+  comprovanteUrl String?  @map("comprovante_url")
+
+  fornecedorId   String?  @map("fornecedor_id")
+  fornecedor     Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  // Vínculo opcional a um abastecimento (quando a despesa de combustível foi
+  // criada junto com um abastecimento lançado na viagem).
+  abastecimentoId String? @unique @map("abastecimento_id")
+  abastecimento   Abastecimento? @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+
+  criadoPorId    String?  @map("criado_por")
+  criadoPor      Usuario? @relation("DespesaCriadaPor", fields: [criadoPorId], references: [id])
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  @@index([viagemId])
+  @@index([categoria])
+  @@index([data])
+  @@index([fornecedorId])
+  @@map("despesas")
+}
+
+// ------------------------------ FORNECEDOR ----------------------------------
+
+model Fornecedor {
+  id           String   @id @default(cuid())
+  nome         String
+  categoria    String?  // posto, oficina, pedágio, alimentação, peças, outros
+  cnpjCpf      String?  @map("cnpj_cpf")
+  telefone     String?
+  cidade       String?
+  observacoes  String?
+  ativo        Boolean  @default(true)
+
+  filialId     String?  @map("filial_id")
+  filial       Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  despesas     Despesa[]
+  contasPagar  ContaPagar[]
+
+  @@index([filialId])
+  @@map("fornecedores")
+}
+
+// ------------------------------ CONTA A PAGAR -------------------------------
+
+model ContaPagar {
+  id             String   @id @default(cuid())
+  descricao      String
+  categoria      String?
+  valor          Decimal  @db.Decimal(14, 2)
+  dataVencimento DateTime? @map("data_vencimento")
+  paga           Boolean  @default(false)
+  dataPagamento  DateTime? @map("data_pagamento")
+  formaPagamento String?  @map("forma_pagamento")
+  observacoes    String?
+
+  fornecedorId   String?  @map("fornecedor_id")
+  fornecedor     Fornecedor? @relation(fields: [fornecedorId], references: [id])
+  cavaloId       String?  @map("cavalo_id")
+  cavalo         Cavalo?  @relation(fields: [cavaloId], references: [id])
+  filialId       String?  @map("filial_id")
+  filial         Filial?  @relation(fields: [filialId], references: [id])
+
+  // Origem: "manual" ou "custo_fixo" (gerada automaticamente).
+  origem         String   @default("manual")
+  custoFixoId    String?  @map("custo_fixo_id")
+  custoFixo      CustoFixo? @relation(fields: [custoFixoId], references: [id])
+  competencia    String?  // "AAAA-MM" quando gerada de custo fixo
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  @@unique([custoFixoId, competencia])
+  @@index([paga])
+  @@index([dataVencimento])
+  @@index([fornecedorId])
+  @@map("contas_pagar")
+}
+
+// ------------------------------ ABASTECIMENTO -------------------------------
+
+model Abastecimento {
+  id             String   @id @default(cuid())
+  cavaloId       String   @map("cavalo_id")
+  cavalo         Cavalo   @relation(fields: [cavaloId], references: [id])
+  viagemId       String?  @map("viagem_id")
+  viagem         Viagem?  @relation(fields: [viagemId], references: [id])
+
+  data           DateTime
+  posto          String?
+  cidade         String?
+  km             Int?
+  litros         Decimal  @db.Decimal(10, 3)
+  valorLitro     Decimal  @map("valor_litro") @db.Decimal(10, 3)
+  valorTotal     Decimal  @map("valor_total") @db.Decimal(14, 2)
+  tipoCombustivel String? @map("tipo_combustivel")
+  tanqueCheio    Boolean  @default(true) @map("tanque_cheio")
+  notaUrl        String?  @map("nota_url")
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  despesa        Despesa?
+
+  @@index([cavaloId])
+  @@index([viagemId])
+  @@index([data])
+  @@map("abastecimentos")
+}
+
+// ------------------------------ RECEBIMENTO (contas a receber) --------------
+
+model Recebimento {
+  id             String   @id @default(cuid())
+  viagemId       String   @map("viagem_id")
+  viagem         Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+
+  valor          Decimal  @db.Decimal(14, 2)
+  dataPrevista   DateTime? @map("data_prevista")
+  dataEfetiva    DateTime? @map("data_efetiva")
+  formaPagamento String?  @map("forma_pagamento")
+  situacao       SituacaoRecebimento @default(a_vencer)
+  comprovanteUrl String?  @map("comprovante_url")
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  @@index([viagemId])
+  @@index([situacao])
+  @@index([dataPrevista])
+  @@map("recebimentos")
+}
+
+// ------------------------------ CUSTO FIXO ----------------------------------
+
+model CustoFixo {
+  id             String   @id @default(cuid())
+  escopo         EscopoCustoFixo @default(empresa)
+  cavaloId       String?  @map("cavalo_id")
+  cavalo         Cavalo?  @relation(fields: [cavaloId], references: [id])
+
+  filialId       String?  @map("filial_id")
+  filial         Filial?  @relation(fields: [filialId], references: [id])
+
+  categoria      String
+  valor          Decimal  @db.Decimal(14, 2)
+  periodicidade  PeriodicidadeCusto @default(mensal)
+  vigenciaInicio DateTime? @map("vigencia_inicio")
+  vigenciaFim    DateTime? @map("vigencia_fim")
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  contasPagar    ContaPagar[]
+
+  @@index([cavaloId])
+  @@index([filialId])
+  @@map("custos_fixos")
+}
+
+// ------------------------------ PNEU ----------------------------------------
+
+model Pneu {
+  id                 String   @id @default(cuid())
+  numeroIdentificacao String  @unique @map("numero_identificacao")
+  marca              String?
+  modelo             String?
+  medida             String?
+  dataCompra         DateTime? @map("data_compra")
+  valor              Decimal? @db.Decimal(14, 2)
+
+  cavaloId           String?  @map("cavalo_id")
+  cavalo             Cavalo?  @relation(fields: [cavaloId], references: [id])
+
+  posicao            String?  // ex.: dianteiro esquerdo, eixo 2 direito, estepe
+  kmInstalacao       Int?     @map("km_instalacao")
+  kmAtual            Int?     @map("km_atual")
+  custoPorKm         Decimal? @map("custo_por_km") @db.Decimal(10, 4) // calculado
+  situacao           SituacaoPneu @default(estoque)
+
+  criadoEm           DateTime @default(now()) @map("criado_em")
+  atualizadoEm       DateTime @updatedAt @map("atualizado_em")
+
+  @@index([cavaloId])
+  @@index([situacao])
+  @@map("pneus")
+}
+
+// ------------------------------ MANUTENÇÃO ----------------------------------
+
+model Manutencao {
+  id           String   @id @default(cuid())
+  cavaloId     String   @map("cavalo_id")
+  cavalo       Cavalo   @relation(fields: [cavaloId], references: [id])
+
+  data         DateTime
+  km           Int?
+  oficina      String?
+  tipoServico  String?  @map("tipo_servico")
+  pecas        Decimal? @db.Decimal(14, 2)
+  maoDeObra    Decimal? @map("mao_de_obra") @db.Decimal(14, 2)
+  valor        Decimal  @db.Decimal(14, 2)
+  proximaData  DateTime? @map("proxima_data")
+  proximoKm    Int?     @map("proximo_km")
+  observacoes  String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  @@index([cavaloId])
+  @@index([data])
+  @@map("manutencoes")
+}
+
+// ------------------------------ DOCUMENTO (Central de Documentos) -----------
+
+model Documento {
+  id                String   @id @default(cuid())
+  categoria         CategoriaDocumento
+  titulo            String
+  numero            String?
+  entidadeVinculada EntidadeVinculada @map("entidade_vinculada")
+  entidadeId        String?  @map("entidade_id")
+  arquivoUrl        String?  @map("arquivo_url")
+  dataEmissao       DateTime? @map("data_emissao")
+  dataVencimento    DateTime? @map("data_vencimento")
+  tags              String?  // texto livre para busca
+  observacoes       String?
+
+  filialId          String?  @map("filial_id")
+  filial            Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm          DateTime @default(now()) @map("criado_em")
+  atualizadoEm      DateTime @updatedAt @map("atualizado_em")
+
+  @@index([categoria])
+  @@index([entidadeVinculada, entidadeId])
+  @@index([dataVencimento])
+  @@map("documentos")
+}
+
+// ------------------------------ META ----------------------------------------
+
+model Meta {
+  id              String   @id @default(cuid())
+  escopo          EscopoMeta @default(veiculo)
+  cavaloId        String?  @map("cavalo_id")
+  cavalo          Cavalo?  @relation(fields: [cavaloId], references: [id])
+
+  filialId        String?  @map("filial_id")
+  filial          Filial?  @relation(fields: [filialId], references: [id])
+
+  ano             Int
+  mes             Int      // 1-12
+  metaFaturamento Decimal? @map("meta_faturamento") @db.Decimal(14, 2)
+  metaLucro       Decimal? @map("meta_lucro") @db.Decimal(14, 2)
+  metaConsumo     Decimal? @map("meta_consumo") @db.Decimal(6, 2) // km/l
+  metaKm          Int?     @map("meta_km")
+
+  criadoEm        DateTime @default(now()) @map("criado_em")
+  atualizadoEm    DateTime @updatedAt @map("atualizado_em")
+
+  @@unique([escopo, cavaloId, ano, mes])
+  @@index([cavaloId])
+  @@map("metas")
+}
+
+// ------------------------------ ANEXO (genérico) ----------------------------
+
+model Anexo {
+  id           String   @id @default(cuid())
+  entidade     String   // "viagem" | "despesa" | "abastecimento" | ...
+  entidadeId   String   @map("entidade_id")
+  tipo         String?
+  url          String
+  nomeOriginal String?  @map("nome_original")
+  tamanho      Int?
+  descricao    String?
+
+  criadoPorId  String?  @map("criado_por")
+  criadoPor    Usuario? @relation("AnexoCriadoPor", fields: [criadoPorId], references: [id])
+
+  criadoEm     DateTime @default(now()) @map("criado_em")
+
+  @@index([entidade, entidadeId])
+  @@map("anexos")
+}
+
+// ------------------------------ HISTÓRICO / AUDITORIA -----------------------
+
+model HistoricoAlteracao {
+  id          String   @id @default(cuid())
+  usuarioId   String?  @map("usuario_id")
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  entidade    String
+  entidadeId  String   @map("entidade_id")
+  acao        AcaoAuditoria
+  dadosAntes  Json?    @map("dados_antes")
+  dadosDepois Json?    @map("dados_depois")
+  data        DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@index([usuarioId])
+  @@map("historico_alteracoes")
+}

@@ -1,0 +1,25 @@
+# Dependências
+/node_modules
+
+# Build do Next.js
+/.next
+/out
+
+# Ambiente (segredos NUNCA versionados)
+.env
+.env.local
+.env.*.local
+
+# Prisma
+/prisma/*.db
+
+# Logs e SO
+*.log
+.DS_Store
+Thumbs.db
+
+# Cobertura de testes
+/coverage
+
+# Dados locais do Docker (se mapeados para o projeto)
+/.docker-data
