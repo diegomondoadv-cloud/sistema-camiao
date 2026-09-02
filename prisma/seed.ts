@@ -9,7 +9,7 @@
  * É idempotente: rodar de novo não duplica o admin.
  */
 import { PrismaClient } from "@prisma/client";
-import argon2 from "argon2";
+import { hash as argonHash } from "@node-rs/argon2";
 
 const prisma = new PrismaClient();
 
@@ -37,7 +37,7 @@ async function main() {
     return;
   }
 
-  const senhaHash = await argon2.hash(senhaInicial);
+  const senhaHash = await argonHash(senhaInicial);
 
   await prisma.usuario.create({
     data: {
