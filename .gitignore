@@ -24,3 +24,5 @@ Thumbs.db
 # Dados locais do Docker (se mapeados para o projeto)
 /.docker-data
 MIGRAR-DADOS-PARA-SUPABASE.sql
+tsconfig.tsbuildinfo
+.next/
