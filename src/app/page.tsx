@@ -82,6 +82,9 @@ export default async function Home() {
               <Link href="/comissoes" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                 Comissões
               </Link>
+              <Link href="/vales" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                Vales do motorista
+              </Link>
               <Link href="/calendario" className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-900">
                 📅 Calendário
               </Link>

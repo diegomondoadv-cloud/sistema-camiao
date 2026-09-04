@@ -160,6 +160,7 @@ model Filial {
   metas        Meta[]
   fornecedores Fornecedor[]
   contasPagar  ContaPagar[]
+  valesMotorista ValeMotorista[]
 
   @@map("filiais")
 }
@@ -283,9 +284,35 @@ model Motorista {
   usuario            Usuario?
   viagens            Viagem[]
   cavalosVinculados  Cavalo[] @relation("MotoristaAtual")
+  vales              ValeMotorista[]
 
   @@index([filialId])
   @@map("motoristas")
+}
+
+/// Vale (adiantamento) do motorista — apenas registro/consulta para descontar
+/// no acerto das comissões. NÃO entra no caixa nem no resultado.
+model ValeMotorista {
+  id             String   @id @default(cuid())
+  motoristaId    String   @map("motorista_id")
+  motorista      Motorista @relation(fields: [motoristaId], references: [id])
+
+  valor          Decimal  @db.Decimal(14, 2)
+  data           DateTime // data em que o vale foi feito
+  dataVencimento DateTime? @map("data_vencimento")
+  acertado       Boolean  @default(false)
+  dataAcerto     DateTime? @map("data_acerto")
+  observacoes    String?
+
+  filialId       String?  @map("filial_id")
+  filial         Filial?  @relation(fields: [filialId], references: [id])
+
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+
+  @@index([motoristaId])
+  @@index([acertado])
+  @@map("vales_motorista")
 }
 
 // ------------------------------ CLIENTE -------------------------------------
