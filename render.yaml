@@ -1,0 +1,33 @@
+# Configuração de deploy no Render (Blueprint).
+# O banco continua no Supabase; aqui roda só o aplicativo (Next.js).
+# Ao criar o serviço, o Render pede os valores das variáveis marcadas
+# com "sync: false" (as conexões do banco, o segredo e o admin).
+services:
+  - type: web
+    name: sistema-camiao
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    # Instala tudo (inclusive ferramentas de build), aplica as migrações no
+    # Supabase, cria o admin (idempotente) e compila o app.
+    buildCommand: npm install --include=dev && npm run vercel-build
+    startCommand: npm start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_SENHA_INICIAL
+        sync: false
+      - key: ADMIN_NOME
+        value: Administrador
