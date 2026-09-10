@@ -205,6 +205,11 @@ model Cavalo {
   mediaConsumoEsperada   Decimal? @map("media_consumo_esperada") @db.Decimal(6, 2) // km/l
   capacidade             String?
   situacao               SituacaoCavalo @default(ativo)
+
+  // Controle de troca de óleo (avaliado pelo km atual, que sobe nas abastecidas)
+  intervaloOleoKm        Int?     @map("intervalo_oleo_km") // km entre trocas
+  kmUltimaTrocaOleo      Int?     @map("km_ultima_troca_oleo")
+  dataUltimaTrocaOleo    DateTime? @map("data_ultima_troca_oleo")
   valorParcela           Decimal? @map("valor_parcela") @db.Decimal(14, 2)
   vencimentoParcela      Int?     @map("vencimento_parcela") // dia do mês
   seguro                 String?

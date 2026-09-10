@@ -6,6 +6,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { DashboardExecutivo } from "./dashboard-executivo";
 import { AlertasManutencaoBanner } from "./manutencoes/alertas-banner";
+import { AlertaOleoBanner } from "./troca-oleo/alerta-banner";
 
 const rotuloPapel: Record<string, string> = {
   admin: "Administrador",
@@ -76,6 +77,9 @@ export default async function Home() {
               <Link href="/manutencoes" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                 Manutenções
               </Link>
+              <Link href="/troca-oleo" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                🛢️ Troca de óleo
+              </Link>
               <Link href="/pneus" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                 Pneus
               </Link>
@@ -120,6 +124,7 @@ export default async function Home() {
       </div>
 
       {gestao && <AlertasManutencaoBanner />}
+      {gestao && <AlertaOleoBanner />}
 
       {gestao ? (
         <DashboardExecutivo />
