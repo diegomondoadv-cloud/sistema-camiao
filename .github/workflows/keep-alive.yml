@@ -1,0 +1,17 @@
+# Robô que mantém o sistema (Render) acordado — evita o "cold start".
+# Acessa o /api/saude a cada ~10 min. Grátis e ilimitado em repositório PÚBLICO.
+name: Manter acordado
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # a cada 10 minutos
+  workflow_dispatch: {} # permite rodar manualmente
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acordar o sistema
+        run: |
+          echo "Pingando o sistema..."
+          curl -fsS --max-time 60 "https://sistema-camiao.onrender.com/api/saude" || true
