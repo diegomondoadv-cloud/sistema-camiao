@@ -4,7 +4,7 @@
 #
 
 app = 'sistema-camiao'
-primary_region = 'iad'
+primary_region = 'gru'
 
 [build]
 [deploy]
@@ -12,7 +12,7 @@ primary_region = 'iad'
   seed_command = 'tsx prisma/seed.ts'
 
 [http_service]
-  internal_port = 3000
+  internal_port = 8080
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true

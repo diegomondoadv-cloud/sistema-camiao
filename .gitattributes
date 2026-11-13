@@ -1,0 +1,4 @@
+# Arquivos que rodam no servidor Linux precisam de quebra de linha LF
+# (senão o "node\r" no shebang quebra o deploy no Fly/Docker).
+docker-entrypoint.js text eol=lf
+*.sh text eol=lf
